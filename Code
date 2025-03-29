@@ -1,0 +1,65 @@
+# Import necessary libraries
+from urllib.request import urlretrieve
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Download and load COVID-19 data for Italy
+urlretrieve('https://gist.githubusercontent.com/aakashns/f6a004fa20c84fec53262f9a8bfee775/raw/f309558b1cf5103424cef58e2ecb8704dcd4d74c/italy-covid-daywise.csv', 'italy_covid_data.csv')
+covid_data = pd.read_csv('italy_covid_data.csv')
+
+# Data exploration and initial checks
+print(covid_data.info())
+print(covid_data.describe())
+print(covid_data.columns)
+
+# Extract relevant columns and clean data
+covid_data['date'] = pd.to_datetime(covid_data['date'])
+covid_data['new_cases'] = pd.to_numeric(covid_data['new_cases'], errors='coerce')
+covid_data['new_deaths'] = pd.to_numeric(covid_data['new_deaths'], errors='coerce')
+
+# Add new calculated columns
+covid_data['death_ratio'] = covid_data['new_deaths'] / covid_data['new_cases'] * 100
+covid_data['positive_rate'] = covid_data['new_cases'] / (covid_data['new_tests'] + 1) * 100
+
+# Filter data for analysis
+high_cases = covid_data[covid_data['new_cases'] > 1000]
+
+# Calculate cumulative totals for analysis
+covid_data['total_cases'] = covid_data['new_cases'].cumsum()
+covid_data['total_deaths'] = covid_data['new_deaths'].cumsum()
+
+# Visualizations for better insights
+plt.figure(figsize=(10, 6))
+plt.plot(covid_data['date'], covid_data['total_cases'], label="Total Cases")
+plt.plot(covid_data['date'], covid_data['total_deaths'], label="Total Deaths", color='red')
+plt.title("COVID-19 Cases and Deaths Over Time in Italy")
+plt.xlabel("Date")
+plt.ylabel("Counts")
+plt.legend()
+plt.show()
+
+# Apply groupby to see monthly trends
+monthly_data = covid_data.groupby(covid_data['date'].dt.month).agg({'new_cases': 'sum', 'new_deaths': 'sum', 'new_tests': 'sum'})
+monthly_data['death_ratio'] = (monthly_data['new_deaths'] / monthly_data['new_cases']) * 100
+
+# Merging population data to calculate per million statistics
+locations_df = pd.read_csv('locations.csv')
+locations_df['location'] = 'Italy'
+merged_data = covid_data.merge(locations_df, on='location')
+merged_data['cases_per_million'] = merged_data['total_cases'] * 1e6 / merged_data['population']
+merged_data['deaths_per_million'] = merged_data['total_deaths'] * 1e6 / merged_data['population']
+
+# Save results to a CSV
+results_data = merged_data[['date', 'new_cases', 'total_cases', 'new_deaths', 'total_deaths', 'new_tests', 'total_tests', 'cases_per_million', 'deaths_per_million']]
+results_data.to_csv('italy_covid_results.csv', index=False)
+
+# Additional analysis: Plotting the death rate over time
+death_rate = merged_data['total_deaths'] / merged_data['total_cases']
+plt.figure(figsize=(10, 6))
+plt.plot(merged_data['date'], death_rate, label='Death Rate')
+plt.title('COVID-19 Death Rate in Italy')
+plt.xlabel('Date')
+plt.ylabel('Death Rate')
+plt.legend()
+plt.show()
